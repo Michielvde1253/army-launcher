@@ -14,6 +14,7 @@
 	import flash.filesystem.FileStream;
 	import flash.permissions.PermissionStatus;
 	import flash.utils.Timer;
+	import flash.utils.getTimer;
 	import flash.utils.ByteArray;
 	import fl.containers.ScrollPane;
 	import flash.text.TextField;
@@ -25,6 +26,7 @@
 	import flash.events.InvokeEvent;
 	import flash.desktop.NativeApplication;
 	import flash.net.navigateToURL;
+	import flash.errors.IOError;
 
 	public class Main extends MovieClip {
 
@@ -55,6 +57,8 @@
 		private var mPopupNotFound: MovieClip;
 
 		private var mPopupNotFoundButtonOk: MovieClip;
+
+		private var mWarningNoInternet: MovieClip;
 
 		private var mScrollPane: ScrollPane;
 
@@ -89,6 +93,10 @@
 		private var active_download_version_slot: int;
 
 		private var not_found_slot_id: int;
+		
+		var snowballs: Array = [];
+
+		private var numberOfSnowballs: int = 50;
 
 		public function Main() {
 			super();
@@ -112,18 +120,24 @@
 			this.mButtonNews.useHandCursor = true;
 			this.mButtonNews.mouseChildren = false;
 			this.mButtonNews.addEventListener(MouseEvent.MOUSE_DOWN, this.onNewsClicked, false, 0, true);
+			this.mButtonNews.addEventListener(MouseEvent.MOUSE_OVER, this.onHoverButton, false, 0, true);
+			this.mButtonNews.addEventListener(MouseEvent.MOUSE_OUT, this.onOutButton, false, 0, true);
 
 			this.mButtonVersions = this.home.getChildByName("Button_Versions") as MovieClip;
 			this.mButtonVersions.buttonMode = true;
 			this.mButtonVersions.useHandCursor = true;
 			this.mButtonVersions.mouseChildren = false;
 			this.mButtonVersions.addEventListener(MouseEvent.MOUSE_DOWN, this.onVersionsClicked, false, 0, true);
+			this.mButtonVersions.addEventListener(MouseEvent.MOUSE_OVER, this.onHoverButton, false, 0, true);
+			this.mButtonVersions.addEventListener(MouseEvent.MOUSE_OUT, this.onOutButton, false, 0, true);
 
 			this.mButtonMods = this.home.getChildByName("Button_Mods") as MovieClip;
 			this.mButtonMods.buttonMode = true;
 			this.mButtonMods.useHandCursor = true;
 			this.mButtonMods.mouseChildren = false;
 			this.mButtonMods.addEventListener(MouseEvent.MOUSE_DOWN, this.onModsClicked, false, 0, true);
+			this.mButtonMods.addEventListener(MouseEvent.MOUSE_OVER, this.onHoverButton, false, 0, true);
+			this.mButtonMods.addEventListener(MouseEvent.MOUSE_OUT, this.onOutButton, false, 0, true);
 
 			this.mFrameNews = this.home.getChildByName("Frame_News") as MovieClip;
 			this.mFrameVersions = this.home.getChildByName("Frame_Versions") as MovieClip;
@@ -137,6 +151,9 @@
 
 			this.mPopupNotFound = this.home.getChildByName("Popup_Not_Found") as MovieClip;
 			this.mPopupNotFound.visible = false;
+
+			this.mWarningNoInternet = this.home.getChildByName("Warning_No_Internet") as MovieClip;
+			this.mWarningNoInternet.visible = false;
 
 			this.mPopupSetupButtonOk = this.mPopupSetup.getChildByName("Button_Ok") as MovieClip;
 			this.mPopupSetupButtonOk.addEventListener(MouseEvent.MOUSE_DOWN, this.onSetupOkClicked, false, 0, true);
@@ -167,7 +184,48 @@
 			var request: URLRequest = new URLRequest(jsonURL);
 			var loader: URLLoader = new URLLoader();
 			loader.addEventListener(Event.COMPLETE, onJSONLoadComplete);
+			loader.addEventListener(IOErrorEvent.IO_ERROR, onIOError);
 			loader.load(request);
+
+			var i:int = 0;
+			while(i < this.numberOfSnowballs){
+				this.createSnowball();
+				i++
+			}
+			addEventListener(Event.ENTER_FRAME, updateSnowfall);			
+
+		}
+
+		private function onHoverButton(param1: MouseEvent): void {
+			param1.target.addEventListener(Event.ENTER_FRAME, zoomIn);
+			param1.target.removeEventListener(Event.ENTER_FRAME, zoomOut);
+		}
+
+		private function onOutButton(param1: MouseEvent): void {
+			param1.target.addEventListener(Event.ENTER_FRAME, zoomOut);
+			param1.target.removeEventListener(Event.ENTER_FRAME, zoomIn);
+		}
+
+		private function zoomIn(param1: Event): void {
+			param1.target.scaleX += 0.04;
+			param1.target.scaleY += 0.04;
+
+			if (param1.target.scaleX >= 1.16) {
+				param1.target.scaleX = 1.16;
+				param1.target.scaleY = 1.16;
+				param1.target.removeEventListener(Event.ENTER_FRAME, zoomIn);
+			}
+		}
+
+		private function zoomOut(param1: Event): void {
+			param1.target.scaleX -= 0.05;
+			param1.target.scaleY -= 0.05;
+
+			if (param1.target.scaleX <= 1) {
+				param1.target.scaleX = 1;
+				param1.target.scaleY = 1;
+				param1.target.removeEventListener(Event.ENTER_FRAME, zoomOut);
+			}
 		}
 
 		public function onNewsClicked(param1: MouseEvent): void {
@@ -179,11 +237,15 @@
 		private function onVersionsClicked(param1: MouseEvent): void {
 			this.hideAllFrames();
 			this.mFrameVersions.visible = true;
+			this.mFrameVersions.alpha = 0;
+			this.mFrameVersions.addEventListener(Event.ENTER_FRAME, fadeIn);
 		}
 
 		private function onModsClicked(param1: MouseEvent): void {
 			this.hideAllFrames();
 			this.mFrameMods.visible = true;
+			this.mFrameMods.alpha = 0;
+			this.mFrameMods.addEventListener(Event.ENTER_FRAME, fadeIn);
 		}
 
 		private function onDownloadClicked(param1: MouseEvent, param2: int): void {
@@ -264,9 +326,9 @@
 					mOldVersionData["game"][i]["installedVersion"] = "not_installed";
 				}
 			}
-			var file: File = File.applicationStorageDirectory.resolvePath("versions.txt");
+			var file: File = File.applicationStorageDirectory.resolvePath("installed.txt");
 			// Save new versions file
-			file.addEventListener(PermissionEvent.PERMISSION_STATUS, saveJSONonPermission);
+			file.addEventListener(PermissionEvent.PERMISSION_STATUS, saveOldVersionsOnPermission);
 			file.requestPermission();
 			this.mVersionSlots[this.not_found_slot_id]["icon_progress_bar"].visible = false;
 			this.mVersionSlots[this.not_found_slot_id]["icon_download"].setVisible(true);
@@ -289,7 +351,14 @@
 			var request: URLRequest = new URLRequest(url);
 			var loader: Loader = new Loader();
 			loader.contentLoaderInfo.addEventListener(Event.COMPLETE, onImageLoadComplete);
+			loader.contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR, onImageIOError);
 			loader.load(request);
+		}
+
+		private function onImageIOError(event: IOErrorEvent): void {
+			trace("Could not load image");
+			this.mScrollPane.source = this.mFrameVersionsInner;
+			this.mScrollPaneMods.source = this.mFrameModsInner;
 		}
 
 		private function onImageLoadComplete(event: Event): void {
@@ -321,9 +390,11 @@
 		private function onJSONLoadComplete(event: Event): void {
 			var loader: URLLoader = URLLoader(event.target);
 			mVersionData = JSON.parse(loader.data);
-
 			trace("JSON data loaded successfully");
+			this.initVersions();
+		}
 
+		private function initVersions(): void {
 			var i: int = 0;
 			var v: int = 1;
 			var m: int = 1;
@@ -351,9 +422,9 @@
 				m++
 			}
 			// Load old versions file
-			var file: File = File.applicationStorageDirectory.resolvePath("versions.txt");
+			var file: File = File.applicationStorageDirectory.resolvePath("installed.txt");
 			if (file.exists) {
-				file.addEventListener(PermissionEvent.PERMISSION_STATUS, openJSONonPermission);
+				file.addEventListener(PermissionEvent.PERMISSION_STATUS, openOldVersionsOnPermission);
 				file.requestPermission();
 			} else {
 				mOldVersionData = {};
@@ -363,12 +434,30 @@
 			}
 
 			// Save new versions file
-			file.addEventListener(PermissionEvent.PERMISSION_STATUS, saveJSONonPermission);
+			file.addEventListener(PermissionEvent.PERMISSION_STATUS, saveOldVersionsOnPermission);
 			file.requestPermission();
+
+			var file1: File = File.applicationStorageDirectory.resolvePath("versions.txt");
+
+			// Save new versions file
+			file1.addEventListener(PermissionEvent.PERMISSION_STATUS, saveVersionsOnPermission);
+			file1.requestPermission();
 		}
-		private function openJSONonPermission(e: PermissionEvent): void {
+
+		private function onIOError(e: IOErrorEvent): void {
+			trace("There was an internet error.")
+			this.mWarningNoInternet.visible = true;
+			var file1: File = File.applicationStorageDirectory.resolvePath("versions.txt");
+
+			file1.addEventListener(PermissionEvent.PERMISSION_STATUS, openVersionsOnPermission);
+			file1.requestPermission();
+
+			this.initVersions();
+		}
+
+		private function openOldVersionsOnPermission(e: PermissionEvent): void {
 			var file: File = e.target as File;
-			file.removeEventListener(PermissionEvent.PERMISSION_STATUS, openJSONonPermission);
+			file.removeEventListener(PermissionEvent.PERMISSION_STATUS, openOldVersionsOnPermission);
 			if (e.status == PermissionStatus.GRANTED) {
 				var fs: FileStream = new FileStream();
 				fs.open(file, FileMode.READ);
@@ -378,9 +467,20 @@
 			this.compareVersions();
 		}
 
-		private function saveJSONonPermission(e: PermissionEvent): void {
+		private function openVersionsOnPermission(e: PermissionEvent): void {
 			var file: File = e.target as File;
-			file.removeEventListener(PermissionEvent.PERMISSION_STATUS, saveJSONonPermission);
+			file.removeEventListener(PermissionEvent.PERMISSION_STATUS, openVersionsOnPermission);
+			if (e.status == PermissionStatus.GRANTED) {
+				var fs: FileStream = new FileStream();
+				fs.open(file, FileMode.READ);
+				mVersionData = JSON.parse(fs.readUTFBytes(fs.bytesAvailable));
+				fs.close();
+			}
+		}
+
+		private function saveOldVersionsOnPermission(e: PermissionEvent): void {
+			var file: File = e.target as File;
+			file.removeEventListener(PermissionEvent.PERMISSION_STATUS, saveOldVersionsOnPermission);
 			if (e.status == PermissionStatus.GRANTED) {
 
 				var fileStream: FileStream = new FileStream();
@@ -393,6 +493,26 @@
 				var stream: FileStream = new FileStream();
 				stream.open(file, FileMode.WRITE);
 				stream.writeUTFBytes(JSON.stringify(mOldVersionData));
+				stream.close();
+
+			}
+		}
+
+		private function saveVersionsOnPermission(e: PermissionEvent): void {
+			var file: File = e.target as File;
+			file.removeEventListener(PermissionEvent.PERMISSION_STATUS, saveVersionsOnPermission);
+			if (e.status == PermissionStatus.GRANTED) {
+
+				var fileStream: FileStream = new FileStream();
+				fileStream.open(file, FileMode.WRITE);
+				fileStream.writeUTFBytes(mVersionData);
+				fileStream.close();
+
+				var bytearray: ByteArray = new ByteArray();
+				bytearray.writeUTF(mOldVersionData);
+				var stream: FileStream = new FileStream();
+				stream.open(file, FileMode.WRITE);
+				stream.writeUTFBytes(JSON.stringify(mVersionData));
 				stream.close();
 
 			}
@@ -503,7 +623,24 @@
 					textfield_extra.text = "";
 				}
 			}
+
+			// Wait 0.6 seconds before continuing, so that the loading screen looks a bit better when using a fast internet connection
+			var waitUntil: int = getTimer() + 600;
+			while (getTimer() < waitUntil) {}
+			this.home.alpha = 0;
 			this.home.visible = true;
+			this.home.addEventListener(Event.ENTER_FRAME, fadeIn);
+		}
+
+		private function fadeIn(param1: Event): void {
+			// Increase the alpha value
+			param1.target.alpha += 0.05; // Adjust the increment for desired speed
+
+			// Once alpha reaches 1 (fully opaque), remove the event listener
+			if (param1.target.alpha >= 1) {
+				param1.target.alpha = 1; // Ensure alpha doesn't exceed 1
+				param1.target.removeEventListener(Event.ENTER_FRAME, fadeIn);
+			}
 		}
 
 		///////////////////////////////////////////////
@@ -592,9 +729,9 @@
 						mOldVersionData["game"][i]["installedVersion"] = mVersionData["game"][this.active_download_version_slot]["latestVersion"];
 					}
 				}
-				var file: File = File.applicationStorageDirectory.resolvePath("versions.txt");
+				var file: File = File.applicationStorageDirectory.resolvePath("installed.txt");
 				// Save new versions file
-				file.addEventListener(PermissionEvent.PERMISSION_STATUS, saveJSONonPermission);
+				file.addEventListener(PermissionEvent.PERMISSION_STATUS, saveOldVersionsOnPermission);
 				file.requestPermission();
 			}
 			this.downloading = false;
@@ -638,5 +775,33 @@
 			reader.close();
 			file.deleteFile();
 		}
+
+		////////////////////////////////////////
+		// Helper functions for the snow balls /
+		////////////////////////////////////////
+
+		private function createSnowball(): void {
+			var snowball: snow = new snow(); // Create new instance of Snowball
+			snowball.x = Math.random() * stage.stageWidth; // Randomize horizontal position
+			snowball.y = Math.random() * -stage.stageHeight; // Start from random height above the stage
+			snowball.scaleX = snowball.scaleY = Math.random() * 0.5 + 0.5; // Randomize size
+			snowball.speed = Math.random() * 3 + 1; // Randomize fall speed
+			snowballs.push(snowball); // Add snowball to array
+			addChildAt(snowball, 1); // Add snowball to the stage
+		}
+
+		private function updateSnowfall(event: Event): void {
+			for (var i: int = 0; i < snowballs.length; i++) {
+				var snowball: snow = snowballs[i];
+				snowball.y += snowball.speed; // Move snowball downwards
+
+				// If the snowball goes off the bottom of the stage, reposition it to the top
+				if (snowball.y > stage.stageHeight) {
+					snowball.y = -snowball.height; // Place it above the stage
+					snowball.x = Math.random() * stage.stageWidth; // Randomize horizontal position again
+				}
+			}
+		}
+
 	}
 }
