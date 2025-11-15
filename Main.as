@@ -32,7 +32,7 @@
 
 		public static var mInstance: Main;
 
-		private static const COUNT_VERSION_SLOTS: int = 10;
+		private static const COUNT_VERSION_SLOTS: int = 18;
 
 		private var home: MovieClip;
 
@@ -93,10 +93,12 @@
 		private var active_download_version_slot: int;
 
 		private var not_found_slot_id: int;
-		
+
 		var snowballs: Array = [];
 
 		private var numberOfSnowballs: int = 50;
+
+		private var use_snow = false;
 
 		public function Main() {
 			super();
@@ -186,14 +188,6 @@
 			loader.addEventListener(Event.COMPLETE, onJSONLoadComplete);
 			loader.addEventListener(IOErrorEvent.IO_ERROR, onIOError);
 			loader.load(request);
-
-			var i:int = 0;
-			while(i < this.numberOfSnowballs){
-				this.createSnowball();
-				i++
-			}
-			addEventListener(Event.ENTER_FRAME, updateSnowfall);			
-
 		}
 
 		private function onHoverButton(param1: MouseEvent): void {
@@ -262,13 +256,14 @@
 				this.active_download_progress_bar.visible = true;
 				this.active_download_progress_bar.gotoAndStop(1);
 
-				//this.downloadZip(mVersionData["game"][param2]["url"]);
-				this.downloadZip("https://github.com/Mima2370/army-client/releases/download/v21.1/AA21_1_release_android_HR.apk");
+				this.downloadZip(mVersionData["game"][param2]["url"]);
+				//this.downloadZip("https://github.com/Mima2370/army-client/releases/download/v21.1/AA21_1_release_android_HR.apk");
 			}
 		}
 
 		private function onPlayClicked(param1: MouseEvent, param2: int): void {
 			CONFIG::BUILD_FOR_WINDOWS {
+				trace("why not")
 				if (NativeProcess.isSupported) {
 					// Legacy = pre version 20 (with flash player projector)
 					var is_legacy: Boolean = mVersionData["game"][param2]["type"] == "legacy"
@@ -282,6 +277,7 @@
 						var nativeProcessStartupInfo: NativeProcessStartupInfo = new NativeProcessStartupInfo();
 						nativeProcessStartupInfo.executable = file;
 					} catch (error: ArgumentError) { // File not found
+						trace("not found")
 						this.not_found_slot_id = param2;
 						this.mPopupNotFound.visible = true;
 						return;
@@ -294,6 +290,7 @@
 
 					var process: NativeProcess = new NativeProcess();
 					process.start(nativeProcessStartupInfo);
+					trace("yep")
 				}
 			}
 
@@ -304,6 +301,7 @@
 
 		private function onSetupOkClicked(param1: MouseEvent): void {
 			this.mVersionSlots[this.active_download_version_slot]["textfield_extra"].text = "";
+			this.mVersionSlots[this.active_download_version_slot]["icon_extra"].visible = false;
 			if (NativeProcess.isSupported) {
 				var file: File = File.applicationStorageDirectory.resolvePath("temp.exe");
 
@@ -392,6 +390,16 @@
 			mVersionData = JSON.parse(loader.data);
 			trace("JSON data loaded successfully");
 			this.initVersions();
+			this.use_snow = mVersionData["snow"]
+
+			if (this.use_snow) {
+				var i: int = 0;
+				while (i < this.numberOfSnowballs) {
+					this.createSnowball();
+					i++
+				}
+				addEventListener(Event.ENTER_FRAME, updateSnowfall);
+			}
 		}
 
 		private function initVersions(): void {
@@ -445,6 +453,16 @@
 		}
 
 		private function onIOError(e: IOErrorEvent): void {
+			// Try the fallback URL first
+			var jsonURLFallback: String = "https://pastebin.com/raw/5PZ0QvLM";
+			var request: URLRequest = new URLRequest(jsonURLFallback);
+			var loader: URLLoader = new URLLoader();
+			loader.addEventListener(Event.COMPLETE, onJSONLoadComplete);
+			loader.addEventListener(IOErrorEvent.IO_ERROR, onIOError2);
+			loader.load(request);
+		}
+
+		private function onIOError2(e: IOErrorEvent): void {
 			trace("There was an internet error.")
 			this.mWarningNoInternet.visible = true;
 			var file1: File = File.applicationStorageDirectory.resolvePath("versions.txt");
@@ -528,20 +546,47 @@
 			var i: * = 0;
 			var listVersionsOld: Array = [];
 			var listLatestVersionsOld: Array = [];
-			for (i in mOldVersionData["game"]) {
-				listVersionsOld.push(mOldVersionData["game"][i]["id"].toString());
-				listLatestVersionsOld.push(mOldVersionData["game"][i]["installedVersion"].toString());
-			}
-			i = 0;
-
 			var listVersions: Array = [];
 
 			for (i in mVersionData["game"]) {
-				var id: String = mVersionData["game"][i]["id"];
+				listVersions.push(mVersionData["game"][i]["id"]);
+			}
+			i = 0;
+			for (i in mOldVersionData["game"]) {
+				// Check for deleted versions
+				if (listVersions.indexOf(mOldVersionData["game"][i]["id"]) != -1) {
+					listVersionsOld.push(mOldVersionData["game"][i]["id"].toString());
+					listLatestVersionsOld.push(mOldVersionData["game"][i]["installedVersion"].toString());
+				} else {
+					mOldVersionData["game"].splice(i,1)
+				}
+			}
+			i = 0;
+			var k:int = 0;
+			trace(listVersions)
+			trace(listVersionsOld)
+			trace(listLatestVersionsOld)
+			for (k in listVersions) {
+				var id: String = listVersions[k];
+				trace(id)
+				
+				var l:int = 0
+				for (l in mVersionData["game"]){
+					if(mVersionData["game"][l]["id"] == id){
+						i = l
+					}
+				}
+			
+				l = 0
+				for (l in mOldVersionData["game"]){
+					if(mOldVersionData["game"][l]["id"] == id){
+						var id_old:int = l
+					}
+				}
 
 				var latestVersion: String = mVersionData["game"][i]["latestVersion"];
+				trace(latestVersion)
 
-				listVersions.push(id);
 				this.loadImage(mVersionData["game"][i]["image"]);
 				var textfield_name: TextField = this.mVersionSlots[i]["slotClip"].getChildByName("Text_Name") as TextField;
 				this.mVersionSlots[i]["textfield_name"] = textfield_name;
@@ -555,8 +600,12 @@
 				this.mVersionSlots[i]["textfield_extra"] = textfield_extra;
 				textfield_extra.text = "";
 
+				var icon_extra: MovieClip = this.mVersionSlots[i]["slotClip"].getChildByName("Icon_Extra") as MovieClip;
+				this.mVersionSlots[i]["icon_extra"] = icon_extra;
+				icon_extra.visible = false;
+
 				var textfield_version: TextField = this.mVersionSlots[i]["slotClip"].getChildByName("Text_Version") as TextField;
-				this.mVersionSlots[i]["textfield_version"] = textfield_extra;
+				this.mVersionSlots[i]["textfield_version"] = textfield_version;
 				textfield_version.text = "v" + mVersionData["game"][i]["versionTag"];
 				textfield_version.x = textfield_name.x + textfield_name.textWidth + 16
 
@@ -579,8 +628,6 @@
 				this.mVersionSlots[i]["icon_play"] = icon_play;
 				var icon_progress_bar: MovieClip = this.mVersionSlots[i]["slotClip"].getChildByName("Icon_Progress_Bar") as MovieClip;
 				this.mVersionSlots[i]["icon_progress_bar"] = icon_progress_bar;
-				trace(JSON.stringify(listLatestVersionsOld))
-				trace(latestVersion.toString())
 				if (listVersionsOld.indexOf(id.toString()) == -1) {
 					// New release, needs download
 					var update: * = {};
@@ -597,6 +644,8 @@
 					icon_play.setVisible(false);
 					icon_progress_bar.visible = false;
 					textfield_extra.text = "";
+					icon_extra.visible = false;
+
 				} else if (listLatestVersionsOld.indexOf(latestVersion.toString()) == -1) {
 					// Already seen but not installed or new update
 					var j: * = 0;
@@ -609,18 +658,23 @@
 					icon_download.setVisible(true);
 					icon_play.setVisible(false);
 					icon_progress_bar.visible = false;
-					trace(id)
-					trace(JSON.stringify(mOldVersionData["game"][i]["installedVersion"]))
-					if (mOldVersionData["game"][i]["installedVersion"] == "not_installed") {
+					if (mOldVersionData["game"][id_old]["installedVersion"] == "not_installed") {
 						textfield_extra.text = "";
+						icon_extra.visible = false;
 					} else {
 						textfield_extra.text = "Update available";
+						icon_extra.visible = true;
+						var text_x: int = textfield_extra.x
+						var text_width: int = textfield_extra.width
+						var text_textwidth: int = textfield_extra.textWidth
+						icon_extra.x = text_x + text_width - text_textwidth - 30
 					}
 				} else {
 					icon_download.setVisible(false);
 					icon_play.setVisible(true);
 					icon_progress_bar.visible = false;
 					textfield_extra.text = "";
+					icon_extra.visible = false;
 				}
 			}
 
@@ -629,6 +683,7 @@
 			while (getTimer() < waitUntil) {}
 			this.home.alpha = 0;
 			this.home.visible = true;
+			this.load.visible = false;
 			this.home.addEventListener(Event.ENTER_FRAME, fadeIn);
 		}
 
@@ -661,6 +716,11 @@
 			}
 
 			this.mVersionSlots[this.active_download_version_slot]["textfield_extra"].text = "Downloading...";
+			this.mVersionSlots[this.active_download_version_slot]["icon_extra"].visible = true;
+			var text_x: int = this.mVersionSlots[this.active_download_version_slot]["textfield_extra"].x
+			var text_width: int = this.mVersionSlots[this.active_download_version_slot]["textfield_extra"].width
+			var text_textwidth: int = this.mVersionSlots[this.active_download_version_slot]["textfield_extra"].textWidth
+			this.mVersionSlots[this.active_download_version_slot]["icon_extra"].x = text_x + text_width - text_textwidth - 30
 
 			zipLoader.dataFormat = URLLoaderDataFormat.BINARY;
 			zipLoader.addEventListener(Event.COMPLETE, this.onDownloadComplete);
@@ -700,8 +760,14 @@
 				this.zipData = null;
 				if (this.download_type == "zip") {
 					this.mVersionSlots[this.active_download_version_slot]["textfield_extra"].text = "Extracting...";
+					this.mVersionSlots[this.active_download_version_slot]["icon_extra"].visible = true;
+					var text_x: int = this.mVersionSlots[this.active_download_version_slot]["textfield_extra"].x
+					var text_width: int = this.mVersionSlots[this.active_download_version_slot]["textfield_extra"].width
+					var text_textwidth: int = this.mVersionSlots[this.active_download_version_slot]["textfield_extra"].textWidth
+					this.mVersionSlots[this.active_download_version_slot]["icon_extra"].x = text_x + text_width - text_textwidth - 30
 					this.unzipFile(file);
 					this.mVersionSlots[this.active_download_version_slot]["textfield_extra"].text = "";
+					this.mVersionSlots[this.active_download_version_slot]["icon_extra"].visible = false;
 				} else if (this.download_type == "exe") {
 					this.mPopupSetup.visible = true;
 				} else if (this.download_type == "apk") {
